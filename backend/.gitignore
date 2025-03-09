@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Ffmpeg Download 
+ffmpeg_download.zip
+ffmpeg_download
+ffmpeg
+
+# Songs Download Folder
+downloads
