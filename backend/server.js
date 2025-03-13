@@ -19,8 +19,123 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR);
 const FFMPEG_DIR = path.join(__dirname, 'ffmpeg');
 const FFMPEG_PATH = isWindows ? path.join(FFMPEG_DIR, 'ffmpeg.exe') : path.join(FFMPEG_DIR, 'ffmpeg');
 
+const YTDLP_PATH = isWindows ? "yt-dlp.exe" : "yt-dlp";
+const YTDLP_URL = isWindows
+  ? "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+  : "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
+
+const FFMPEG_URL = isWindows
+  ? "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+  : "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz";
+
 app.use(cors({ origin: 'http://localhost:5173' }));
 app.use(express.json());
+
+const downloadFFmpeg = async () => {
+  if (fs.existsSync(FFMPEG_PATH)) {
+    console.log("FFmpeg is already installed.");
+    return;
+  }
+
+  console.log("Downloading FFmpeg...");
+
+  const TEMP_DIR = path.join(__dirname, 'ffmpeg_download');
+  const ZIP_PATH = TEMP_DIR + (isWindows ? ".zip" : ".tar.xz");
+
+  return new Promise((resolve, reject) => {
+    https.get(FFMPEG_URL, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        return https.get(response.headers.location, res => res.pipe(fs.createWriteStream(ZIP_PATH)).on('finish', () => resolve()));
+      }
+
+      if (response.statusCode !== 200) {
+        reject(`Error downloading FFmpeg: ${response.statusCode}`);
+        return;
+      }
+
+      const file = fs.createWriteStream(ZIP_PATH);
+      response.pipe(file);
+
+      file.on('finish', async () => {
+        file.close();
+        console.log("FFmpeg download complete.");
+
+        if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
+
+        if (isWindows) {
+          await extract(ZIP_PATH, { dir: TEMP_DIR });
+          console.log("FFmpeg extracted successfully.");
+
+          const extractedFolders = fs.readdirSync(TEMP_DIR);
+          const ffmpegFolder = extractedFolders.find(folder => folder.includes("ffmpeg"));
+          if (!ffmpegFolder) return reject("FFmpeg folder not found.");
+
+          const extractedPath = path.join(TEMP_DIR, ffmpegFolder, "bin", "ffmpeg.exe");
+          if (!fs.existsSync(extractedPath)) return reject("ffmpeg.exe not found.");
+
+          if (!fs.existsSync(FFMPEG_DIR)) fs.mkdirSync(FFMPEG_DIR);
+
+          fs.renameSync(extractedPath, FFMPEG_PATH);
+          console.log("FFmpeg installed at:", FFMPEG_PATH);
+        } else {
+          exec(`tar -xf ${ZIP_PATH} -C ${TEMP_DIR}`, (err) => {
+            if (err) return reject("Error extracting FFmpeg on Linux.");
+
+            const extractedFolders = fs.readdirSync(TEMP_DIR);
+            const ffmpegFolder = extractedFolders.find(folder => folder.includes("ffmpeg"));
+            if (!ffmpegFolder) return reject("FFmpeg folder not found.");
+
+            const extractedPath = path.join(TEMP_DIR, ffmpegFolder, "ffmpeg");
+            if (!fs.existsSync(extractedPath)) return reject("FFmpeg binary not found.");
+
+            if (!fs.existsSync(FFMPEG_DIR)) fs.mkdirSync(FFMPEG_DIR);
+
+            fs.renameSync(extractedPath, FFMPEG_PATH);
+            fs.chmodSync(FFMPEG_PATH, 0o755);
+            console.log("FFmpeg installed at:", FFMPEG_PATH);
+          });
+        }
+
+        fs.unlinkSync(ZIP_PATH);
+        resolve();
+      });
+
+      file.on('error', (err) => reject(`Error writing file: ${err}`));
+    }).on('error', (err) => reject(`Error in download request: ${err}`));
+  });
+};
+
+const installYT_DLP = async () => {
+  try {
+    execSync(`${YTDLP_PATH} --version`, { stdio: 'ignore' });
+    console.log("yt-dlp is already installed.");
+  } catch (error) {
+    console.log("yt-dlp not found. Downloading...");
+
+    const filePath = path.join(__dirname, YTDLP_PATH);
+
+    return new Promise((resolve, reject) => {
+      https.get(YTDLP_URL, (response) => {
+        if (response.statusCode !== 200) {
+          reject(`Error downloading yt-dlp: ${response.statusCode}`);
+          return;
+        }
+
+        const file = fs.createWriteStream(filePath);
+        response.pipe(file);
+
+        file.on('finish', () => {
+          file.close();
+          if (!isWindows) fs.chmodSync(filePath, 0o755);
+          console.log("yt-dlp installed successfully.");
+          resolve();
+        });
+
+        file.on('error', (err) => reject(`Error writing yt-dlp file: ${err}`));
+      }).on('error', (err) => reject(`Error downloading yt-dlp: ${err}`));
+    });
+  }
+};
 
 app.get('/get_spotify_token', async (req, res) => {
   try {
@@ -97,45 +212,12 @@ app.post('/download_song', async (req, res) => {
     console.error("[Backend] Backend error:", error);
     res.status(500).json({ error: 'Internal server error' });
   }
-});  
-
-app.post('/download_all', async (req, res) => {
-    const { songs } = req.body;
-    if (!Array.isArray(songs) || songs.length === 0) return res.status(400).json({ error: 'Invalid song list' });
-
-    let downloadedFiles = [];
-    let errors = [];
-
-    for (const song of songs) {
-        const query = `${song.name} ${song.artist} audio`;
-
-        try {
-            const videoId = await new Promise((resolve, reject) => {
-                exec(`yt-dlp --default-search "ytsearch" --get-id --no-warnings "${query}"`, (error, stdout) => {
-                    if (error) return reject('Error searching YouTube');
-                    const id = stdout.trim().split('\n')[0];
-                    if (!id) return reject('Video not found');
-                    resolve(id);
-                });
-            });
-
-            const outputPath = path.join(DOWNLOAD_DIR, `${videoId}.mp3`);
-            const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-            await new Promise((resolve, reject) => {
-                exec(`yt-dlp -x --audio-format mp3 --ffmpeg-location "${FFMPEG_PATH}" -o "${outputPath}" "${youtubeUrl}"`, (err) => {
-                    if (err) return reject('Error downloading audio');
-                    downloadedFiles.push(outputPath);
-                    resolve();
-                });
-            });
-
-        } catch (error) {
-            errors.push({ song, error });
-        }
-    }
-
-    res.json({ downloadedFiles, errors });
 });
 
-app.listen(PORT, () => console.log(`[Backend] Server running at http://localhost:${PORT}`));
+downloadFFmpeg(), installYT_DLP()
+  .then(() => {
+    app.listen(PORT, () => console.log(`[Backend] Server running at http://localhost:${PORT}`));
+  })
+  .catch(error => {
+    console.error("[Backend] Error downloading FFmpeg:", error);
+  });

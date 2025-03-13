@@ -28,5 +28,9 @@ ffmpeg_download.zip
 ffmpeg_download
 ffmpeg
 
+# YTDL Download
+yt-dlp.exe
+yt-dlp
+
 # Songs Download Folder
 downloads
