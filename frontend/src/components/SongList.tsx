@@ -14,13 +14,13 @@ const BACKEND_URL = 'http://localhost:4000';
 
 const SongList = ({ songs }: SongListProps) => {
   const [downloading, setDownloading] = useState<{ [key: string]: boolean }>({});
+  const [progress, setProgress] = useState(0);
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   const searchYouTubeAndDownload = async (song: Song) => {
     setDownloading((prev) => ({ ...prev, [song.name]: true }));
 
     try {
-      console.log(`Searching YouTube: ${song.name} - ${song.artist}`);
-
       const response = await fetch(`${BACKEND_URL}/download_song`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -41,19 +41,47 @@ const SongList = ({ songs }: SongListProps) => {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-
-      console.log(`Download complete: ${song.name}.mp3`);
     } catch (error) {
-      console.error("Error searching the song on YouTube:", error);
       alert("An error occurred while searching for the song.");
     }
 
     setDownloading((prev) => ({ ...prev, [song.name]: false }));
   };
 
+  const downloadAllSongs = async () => {
+    setDownloadingAll(true);
+    setProgress(0);
+
+    for (let i = 0; i < songs.length; i++) {
+      await searchYouTubeAndDownload(songs[i]);
+      setProgress(((i + 1) / songs.length) * 100);
+    }
+
+    setDownloadingAll(false);
+  };
+
   return (
     <div className="mt-8">
       <h2 className="text-2xl font-semibold text-center mb-4">Songs</h2>
+      <div className="flex justify-center mb-4">
+        <button
+          onClick={downloadAllSongs}
+          className={`px-4 py-2 rounded-md text-white ${
+            downloadingAll ? "bg-gray-500 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600"
+          }`}
+          disabled={downloadingAll}
+        >
+          {downloadingAll ? "Downloading All..." : "Download All"}
+        </button>
+      </div>
+      {downloadingAll && (
+        <div className="w-full bg-gray-300 rounded-md overflow-hidden mb-4">
+          <div
+            className="bg-blue-500 h-4 rounded-md"
+            style={{ width: `${progress}%` }}
+          ></div>
+        </div>
+      )}
       <ul className="space-y-4">
         {songs.map((song, index) => (
           <li key={index} className="flex justify-between items-center bg-gray-100 p-4 rounded-md">
