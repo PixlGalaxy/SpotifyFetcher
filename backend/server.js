@@ -33,11 +33,11 @@ app.use(express.json());
 
 const downloadFFmpeg = async () => {
   if (fs.existsSync(FFMPEG_PATH)) {
-    console.log("FFmpeg is already installed.");
+    console.log("[Backend] FFmpeg is already installed.");
     return;
   }
 
-  console.log("Downloading FFmpeg...");
+  console.log("[Backend] Downloading FFmpeg...");
 
   const TEMP_DIR = path.join(__dirname, 'ffmpeg_download');
   const ZIP_PATH = TEMP_DIR + (isWindows ? ".zip" : ".tar.xz");
@@ -58,13 +58,13 @@ const downloadFFmpeg = async () => {
 
       file.on('finish', async () => {
         file.close();
-        console.log("FFmpeg download complete.");
+        console.log("[Backend] FFmpeg download complete.");
 
         if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
 
         if (isWindows) {
           await extract(ZIP_PATH, { dir: TEMP_DIR });
-          console.log("FFmpeg extracted successfully.");
+          console.log("[Backend] FFmpeg extracted successfully.");
 
           const extractedFolders = fs.readdirSync(TEMP_DIR);
           const ffmpegFolder = extractedFolders.find(folder => folder.includes("ffmpeg"));
@@ -76,7 +76,7 @@ const downloadFFmpeg = async () => {
           if (!fs.existsSync(FFMPEG_DIR)) fs.mkdirSync(FFMPEG_DIR);
 
           fs.renameSync(extractedPath, FFMPEG_PATH);
-          console.log("FFmpeg installed at:", FFMPEG_PATH);
+          console.log("[Backend] FFmpeg installed at:", FFMPEG_PATH);
         } else {
           exec(`tar -xf ${ZIP_PATH} -C ${TEMP_DIR}`, (err) => {
             if (err) return reject("Error extracting FFmpeg on Linux.");
@@ -92,7 +92,7 @@ const downloadFFmpeg = async () => {
 
             fs.renameSync(extractedPath, FFMPEG_PATH);
             fs.chmodSync(FFMPEG_PATH, 0o755);
-            console.log("FFmpeg installed at:", FFMPEG_PATH);
+            console.log("[Backend] FFmpeg installed at:", FFMPEG_PATH);
           });
         }
 
@@ -108,9 +108,9 @@ const downloadFFmpeg = async () => {
 const installYT_DLP = async () => {
   try {
     execSync(`${YTDLP_PATH} --version`, { stdio: 'ignore' });
-    console.log("yt-dlp is already installed.");
+    console.log("[Backend] yt-dlp is already installed.");
   } catch (error) {
-    console.log("yt-dlp not found. Downloading...");
+    console.log("[Backend] yt-dlp not found. Downloading...");
 
     const filePath = path.join(__dirname, YTDLP_PATH);
 
@@ -127,7 +127,7 @@ const installYT_DLP = async () => {
         file.on('finish', () => {
           file.close();
           if (!isWindows) fs.chmodSync(filePath, 0o755);
-          console.log("yt-dlp installed successfully.");
+          console.log("[Backend] yt-dlp installed successfully.");
           resolve();
         });
 
