@@ -137,32 +137,37 @@ const installYT_DLP = async () => {
   }
 };
 
+const fetch = require('node-fetch');
+
+const CLIENT_ID = 'TU_CLIENT_ID';
+const CLIENT_SECRET = 'TU_CLIENT_SECRET';
+
 app.get('/get_spotify_token', async (req, res) => {
   try {
-    console.log("[Backend] Attempting to get Spotify token...");
+    console.log("[Backend] Getting Spotify token from Developer API...");
 
-    const response = await fetch('https://open.spotify.com/get_access_token', {
+    const authBuffer = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-      }
+        'Authorization': `Basic ${authBuffer}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({ grant_type: 'client_credentials' })
     });
 
     if (!response.ok) {
-      console.error("[Backend] Request error:", response.status);
-      return res.status(response.status).json({ error: `Spotify API error: ${response.status}` });
+      console.error("[Backend] Spotify auth error:", response.statusText);
+      return res.status(response.status).json({ error: 'Spotify token request failed' });
     }
 
     const data = await response.json();
-    if (!data.accessToken) {
-      console.error("[Backend] Failed to retrieve Spotify token.");
-      return res.status(500).json({ error: "Could not retrieve token" });
-    }
-
-    console.log("[Backend] Spotify token retrieved successfully.");
-    res.json({ accessToken: data.accessToken });
+    console.log("[Backend] Token received successfully.");
+    res.json({ accessToken: data.access_token, expiresIn: data.expires_in });
 
   } catch (error) {
-    console.error("[Backend] Error retrieving Spotify token:", error);
+    console.error("[Backend] Error getting Spotify token:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
